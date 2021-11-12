@@ -26,7 +26,7 @@ library(rgdal)
 
 library(caret)          # an aggregator package for performing many machine learning models
 # library(pdp)            # model visualization
-   
+
 
 # library(scales) # alpha channel
 
@@ -46,7 +46,7 @@ includingZero = FALSE
 #path.base = "G:/BioAtmo/schucknecht-a/R/UAV_experiment/N_estimation_ModelComparison/"
 path.base = "~/Nextcloud/SUSALPS-RS2018_modelPaper/Gitlab/grasslanduas/"
 path_uav_images = "/DATA10TB/Grassland_Multi/neuprozessierung_2019_2020_fe_rb_gesamt/"
-
+path_canopy_heights = "/DATA10TB/Grassland_Multi/"
 
 # set working directory
 setwd(path.base)
@@ -56,6 +56,7 @@ source("UAV_exp_VI_zerobiomass.R")
 path_data = "~/Nextcloud/MultiTempGrass/"
 path_out = "~/Nextcloud/MultiTempGrass/tmp/"
 
+ncell_window = 3 
 
 
 
@@ -134,24 +135,31 @@ gubitzmoos_images =  list.files(path_uav_images, pattern = "gubitzmoos[A-z0-9\ ]
 roedensdorf_images =  list.files(path_uav_images, pattern = "roedensdorf[A-z0-9\ ]*.tif$")
 obernschreez_images =  list.files(path_uav_images, pattern = "obernschreez[A-z0-9\ ]*.tif$")
 
+# UAV based canopy height
+bestand_2019_images = list.files(paste0(path_canopy_heights, "/bestand_2019"), pattern = "[A-z0-9\ ]*.tif$")
+differenzen_2019_2021_min_images = list.files(paste0(path_canopy_heights, "/differenzen_2019_2021_min"), pattern = "[A-z0-9\ ]*.tif$")
+
+
 
 sort(unique(str_extract(gubitzmoos_images, pattern = "[0-9]{8}"))) # extract dates
 sort(unique(str_extract(roedensdorf_images, pattern = "[0-9]{8}"))) # extract dates
 sort(unique(str_extract(obernschreez_images, pattern = "[0-9]{8}"))) # extract dates
- 
+
+sort(unique(str_extract(bestand_2019_images, pattern = "[0-9]{8}"))) # extract dates
+sort(unique(str_extract(differenzen_2019_2021_min_images, pattern = "[0-9]{8}"))) # extract dates
+
+
 uav_dates1 = sort(unique(str_extract(fendt_images, pattern = "[0-9]{8}"))) # extract dates
 uav_dates2 = sort(unique(str_extract(gubitzmoos_images, pattern = "[0-9]{8}"))) # extract dates
 uav_dates3 = sort(unique(str_extract(roedensdorf_images, pattern = "[0-9]{8}"))) # extract dates
 uav_dates4 = sort(unique(str_extract(obernschreez_images, pattern = "[0-9]{8}"))) # extract dates
 
+
 uav_dates = sort(unique(c(uav_dates1, uav_dates2, uav_dates3, uav_dates4)))
-
-
 # stopifnot(all(uav_dates == sort(unique(str_extract(rottenbuch_images, pattern = "[0-9]{8}"))))) # compare dates from RB site, and stop if not matching
 
 # 16 dates
 print(length(uav_dates))
-
 # redundant uav images
 uav_dates[!(uav_dates %in% sampling_dates_corrected_v)]
 # [1] "20190329" "20190625" "20210521" 
@@ -159,6 +167,24 @@ uav_dates[!(uav_dates %in% sampling_dates_corrected_v)]
 # missing uav images (three missing)
 sampling_dates_corrected_v  [!(sampling_dates_corrected_v %in% uav_dates)]
 # "20190626"
+canopy_dates1 = sort(unique(str_extract(bestand_2019_images, pattern = "[0-9]{8}"))) # extract dates
+canopy_dates2 = sort(unique(str_extract(differenzen_2019_2021_min_images, pattern = "[0-9]{8}"))) # extract dates
+canopy_dates = sort(unique(c(canopy_dates2, canopy_dates2)))
+
+
+# 14 dates
+print(length(canopy_dates))
+# redundant canopy images
+canopy_dates[!(canopy_dates %in% sampling_dates_corrected_v)]
+# [1] "20190329" "20190625" 
+
+canopy_dates[!(canopy_dates %in% uav_dates)]
+
+
+# missing canopy images (three missing)
+sampling_dates_corrected_v  [!(sampling_dates_corrected_v %in% canopy_dates)]
+# "20190626"
+
 
 # replace 
 sampling_dates_corrected_v[sampling_dates_corrected_v=="20190626"] = "20190625"
@@ -172,6 +198,9 @@ unique(df_new_coords$sampling_dates_corrected[!(df_new_coords$sampling_dates_cor
 
 # dates when sampling was done
 uav_dates[uav_dates %in% sampling_dates_corrected_v] # 15 dates
+
+canopy_dates[canopy_dates %in% sampling_dates_corrected_v] # 15 dates
+
 
 # 
 sampling_dates_process_v = sampling_dates_corrected_v[(sampling_dates_corrected_v %in% uav_dates)]
@@ -198,7 +227,10 @@ window_sizes = c(1,3,5)
 # n_newcols = length(usv_sites_abb) * length(uav_bands_cap) * length(window_sizes)
 
 n_dates = length(sampling_dates_process_v)
-n_cols_df =  length(uav_bands_cap) + 18 # 4 bands + 18 vis
+n_cols_df =  length(uav_bands_cap) + 18 + 4*2 # 4 bands + 18 vis + 7*2 canopy heights
+
+# avg. max. min, 25 and 75 percentiles, median, sd
+
 
 
 # Container for the result
@@ -208,9 +240,8 @@ dim(overlay_SEQ_arr)
 
 
 
-
-# site_idx = 4 
-# date_idx=1
+site_idx = 2
+date_idx=1
 
 
 if (FALSE) { 
@@ -242,11 +273,10 @@ if (FALSE) {
             # Coastal blue 444(28)*, blue 475(32), green 531(14)*, green 560(27), red 650(16)*, red 668(14), red edge 705(10)*, red edge 717(12), red edge 740(18)*, NIR 842(57) 
             
             
-            print("calculate 3x3 average values")
+            print("UAV: calculate 3x3 average values")
             
             
             # Focal images    
-            ncell_window = 3 
             focal_rs_3tmp =stack(lapply(1:length(var_names_SR_seq), FUN = function(x) focal(uav_rs_tmp[[x]],  w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=sum, na.rm=FALSE, pad=FALSE, padValue=NA)))
             
             # ncell_window = 5
@@ -267,21 +297,94 @@ if (FALSE) {
             # overlay5_vi_SEQ = retrieveVI(df= data.frame(uav_overlay5_tmp), doREM = F, doSEQ = T)
             
             
+            
+            ### Canopy heights
+            # "/DATA10TB/Grassland_Multi/bestand_2019/rottenbuch_dsm_20190329_minus_2019min_dgm.tif"
+            # "/DATA10TB/Grassland_Multi/differenzen_2019_2021_min/rottenbuch_dsm_20190329_minus_2019_21_min_dgm.tif"
+            
+            canopy_filename1_tmp = paste0(path_canopy_heights, "bestand_2019/", uav_site, "_dsm_", uav_date, "_minus_2019min_dgm.tif")
+            
+            if (!file.exists(canopy_filename1_tmp)) { 
+                print("Canopy height image does not exist")
+                print(canopy_filename1_tmp)
+                canopy1_tmp = data.frame(matrix(NA, nrow = nrow(df_new_coords), ncol = 4))
+            } else { 
+                
+                canopy1_rs_tmp = raster(canopy_filename1_tmp)
+                
+                names(canopy1_rs_tmp) = "bestand_2019"
+                print("Canopy height1: calculate 3x3 average values")
+                
+                # Focal images    
+                focal_canopy1_avg_tmp = focal(canopy1_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=sum, na.rm=FALSE, pad=FALSE, padValue=NA)
+                
+                focal_canopy1_med_tmp = focal(canopy1_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=median, na.rm=FALSE, pad=FALSE, padValue=NA) * (ncell_window^2)
+                
+                focal_canopy1_min_tmp = focal(canopy1_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=min, na.rm=FALSE, pad=FALSE, padValue=NA) * (ncell_window^2)
+                
+                focal_canopy1_max_tmp = focal(canopy1_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=max, na.rm=FALSE, pad=FALSE, padValue=NA) * (ncell_window^2)
+                 
+                 # overlay    
+                canopy1_avg3_tmp = raster::extract(focal_canopy1_avg_tmp, new_sp) # 3 pix
+                canopy1_med3_tmp = raster::extract(focal_canopy1_med_tmp, new_sp) # 3 pix
+                canopy1_min3_tmp = raster::extract(focal_canopy1_min_tmp, new_sp) # 3 pix
+                canopy1_max3_tmp = raster::extract(focal_canopy1_max_tmp, new_sp) # 3 pix
+                 
+                
+                canopy1_tmp = cbind(canopy1_avg3_tmp, canopy1_med3_tmp, canopy1_min3_tmp, canopy1_max3_tmp)
+            }
+            
+            
+            canopy_filename2_tmp = paste0(path_canopy_heights, "differenzen_2019_2021_min/", uav_site, "_dsm_", uav_date, "_minus_2019min_dgm.tif")
+            
+            if (!file.exists(canopy_filename2_tmp)) { 
+                print("Canopy height image does not exist")
+                print(canopy_filename2_tmp)
+                canopy2_tmp = data.frame(matrix(NA, nrow = nrow(df_new_coords), ncol = 4))
+            } else { 
+                
+                canopy2_rs_tmp = raster(canopy_filename2_tmp)
+                
+                names(canopy2_rs_tmp) = "differenzen_2019_2021_min"
+                print("Canopy height2: calculate 3x3 average values")
+                
+                # Focal images    
+                focal_canopy2_avg_tmp = focal(canopy2_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=sum, na.rm=FALSE, pad=FALSE, padValue=NA)
+                
+                focal_canopy2_med_tmp = focal(canopy2_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=median, na.rm=FALSE, pad=FALSE, padValue=NA) * (ncell_window^2)
+                
+                focal_canopy2_min_tmp = focal(canopy2_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=min, na.rm=FALSE, pad=FALSE, padValue=NA) * (ncell_window^2)
+                
+                focal_canopy2_max_tmp = focal(canopy2_rs_tmp, w=matrix(1/(ncell_window^2),nrow=ncell_window,ncol=ncell_window), fun=max, na.rm=FALSE, pad=FALSE, padValue=NA) * (ncell_window^2)
+                
+                # overlay    
+                canopy2_avg3_tmp = raster::extract(focal_canopy2_avg_tmp, new_sp) # 3 pix
+                canopy2_med3_tmp = raster::extract(focal_canopy2_med_tmp, new_sp) # 3 pix
+                canopy2_min3_tmp = raster::extract(focal_canopy2_min_tmp, new_sp) # 3 pix
+                canopy2_max3_tmp = raster::extract(focal_canopy2_max_tmp, new_sp) # 3 pix
+                
+                
+                canopy2_tmp = cbind(canopy2_avg3_tmp, canopy2_med3_tmp, canopy2_min3_tmp, canopy2_max3_tmp)
+            }
+            
+             
+            
+            
             # store processed values
             # overlay_SEQ_arr[, site_idx, date_idx, , 1] = as.matrix(overlay1_vi_SEQ)
             # overlay_SEQ_arr[, site_idx, date_idx, , 2] = as.matrix(overlay3_vi_SEQ)
             # overlay_SEQ_arr[, site_idx, date_idx, , 3] = as.matrix(overlay5_vi_SEQ)
             
-            overlay_SEQ_arr[, site_idx, date_idx, ] = as.matrix(overlay3_vi_SEQ)
+            overlay_SEQ_arr[, site_idx, date_idx, ] = as.matrix(cbind(overlay3_vi_SEQ, canopy1_tmp, canopy2_tmp))
         }
         
     } 
     endCluster()
     
     # colnames(overlay1_vi_SEQ)
-    saveRDS(overlay_SEQ_arr, "overlay_SEQ_arr.Rds")
+    saveRDS(overlay_SEQ_arr, "overlay_SEQ_arr_tmp.Rds")
 } else { 
-    overlay_SEQ_arr = readRDS("overlay_SEQ_arr.Rds")
+    overlay_SEQ_arr = readRDS("overlay_SEQ_arr_tmp.Rds")
 }
 
 gc()
@@ -311,7 +414,7 @@ overlay_tmp_df = foreach(row_idx = 1:nrow(df_new_coords), .combine = "rbind") %d
     
     site_idxs[row_idx]
     if (is.na(site_idxs[row_idx])) { 
-     return(rep(NA, 66))   # Other sites
+        return(rep(NA, 66))   # Other sites
     }
     
     # date_idxs[row_idx]
@@ -328,9 +431,9 @@ overlay_tmp_df = foreach(row_idx = 1:nrow(df_new_coords), .combine = "rbind") %d
 
 
 seq_colnames= c("R_550", "R_660",  "R_735",  "R_790",  "SR" ,    "NDVI"
-,"RDVI", "MSR1"  , "DVI",    "SAVI"  , "OSAVI" , "MSAVI" 
-,"NDVIre", "RRI1" ,  "RRI2"  , "MCARI",  "Datts" , "aDVI"
-,"RARSa", "MTVI"  , "MCARI2", "MCARI1")
+                ,"RDVI", "MSR1"  , "DVI",    "SAVI"  , "OSAVI" , "MSAVI" 
+                ,"NDVIre", "RRI1" ,  "RRI2"  , "MCARI",  "Datts" , "aDVI"
+                ,"RARSa", "MTVI"  , "MCARI2", "MCARI1")
 
 
 # new_colnames = as.vector(sapply(dimnames(overlay_SEQ_arr)[[5]],  FUN = function(x) paste0(seq_colnames, "_", x)))
@@ -339,9 +442,9 @@ colnames(overlay_tmp_df) = seq_colnames
 
 
 overlay_tmp_df = data.frame(overlay_tmp_df)
- 
 
- 
+
+
 plot(overlay_tmp_df$R_550, overlay_tmp_df$R_550)
 plot(overlay_tmp_df$R_550, overlay_tmp_df$R_550)
 
@@ -357,9 +460,9 @@ df_final$X1 = NULL
 
 ##### save df to csv file
 write.csv(df_final, file = "SUSALPS-RS_UAS+Sat_samplingData_2019-2021_all_20211015_UASdata_v2.csv", row.names = F)
- 
+
 writeOGR(SpatialPointsDataFrame(new_sp, data = df_final, proj4string = crs(proj4.UTM32N)), dsn = ".", layer = "SUSALPS-RS_UAS+Sat_samplingData_2019-2021_all_20211015_UASdata_v2", driver = "ESRI Shapefile", overwrite_layer = T)
- 
+
 
 
 
