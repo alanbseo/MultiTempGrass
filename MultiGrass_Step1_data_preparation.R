@@ -433,7 +433,11 @@ overlay_tmp_df = foreach(row_idx = 1:nrow(df_new_coords), .combine = "rbind") %d
 seq_colnames= c("R_550", "R_660",  "R_735",  "R_790",  "SR" ,    "NDVI"
                 ,"RDVI", "MSR1"  , "DVI",    "SAVI"  , "OSAVI" , "MSAVI" 
                 ,"NDVIre", "RRI1" ,  "RRI2"  , "MCARI",  "Datts" , "aDVI"
-                ,"RARSa", "MTVI"  , "MCARI2", "MCARI1")
+                ,"RARSa", "MTVI"  , "MCARI2", "MCARI1", 
+                "Canopy1_Avg", "Canopy1_Med", "Canopy1_Min", "Canopy1_Max",
+                "Canopy2_Avg", "Canopy2_Med", "Canopy2_Min", "Canopy2_Max"
+                
+                )
 
 
 # new_colnames = as.vector(sapply(dimnames(overlay_SEQ_arr)[[5]],  FUN = function(x) paste0(seq_colnames, "_", x)))
